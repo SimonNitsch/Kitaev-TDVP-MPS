@@ -170,6 +170,8 @@ void Kitaev_Model::add_kitaev_interaction(std::vector<int>& p_vec, int aux, int 
     
     for (int& i : p_vec){
         std::array<int,3> n = get_neighbour_data(i);
+        
+        std::cout << "\n";
         if (n[0] != 0){
             ampo += Kx,"Sx",aux_num(i,aux,sec_aux),"Sx",aux_num(n[0],aux,sec_aux);
         }
@@ -414,17 +416,21 @@ itensor::MPO& H0, itensor::MPS& psi, itensor::Cplx& t, int TimeSteps, itensor::A
         }
         cb += t_beta;
         double E = itensor::tdvp(psi,H0,t,sweeps,args);
-        //double E2 = std::real(itensor::innerC(psi,H0,H0,psi));
+        double E2 = std::real(itensor::innerC(psi,H0,H0,psi));
         max_bond = std::max(max_bond,itensor::maxLinkDim(psi));
 
         std::complex<double> w = itensor::innerC(psi,H_flux,psi);
-        double c = cb * cb * (E_vec.back() - E) / t_beta;
+        //double c = cb * cb * (E_vec.back() - E) / t_beta;
+        double c = cb * cb * (E2 - E * E);
         double s = S_vec.back() + t_beta * 0.5 * (c/cb + C_vec.back()/cb_old);
 
         E_vec.push_back(E);
         C_vec.push_back(c);
         S_vec.push_back(s);
         W_vec.push_back(std::real(w)); 
+ 
+        std::cout << "Current Beta: " << cb << ", Energy: " << E << ", Heat Capacity: " << c << "\n";
+
 
         for (int indi = 0; indi != 3; indi++){
             std::complex<double> m = itensor::innerC(psi,M[indi],psi);
@@ -432,6 +438,7 @@ itensor::MPO& H0, itensor::MPS& psi, itensor::Cplx& t, int TimeSteps, itensor::A
             std::complex<double> m2 = itensor::innerC(psi,M2[indi],psi);
             M_vec2[indi].push_back(std::real(m2));
         }
+        std::cout << "\n" << std::flush;
     }
     return max_bond;
 }
@@ -452,6 +459,27 @@ itensor::MPO& H0, itensor::MPS& psi, itensor::Cplx& t, int TimeSteps, itensor::A
     }
 }
 
+
+template<typename T>
+void Kitaev_Model::save_data(std::string filename, std::vector<std::vector<T>>& vec){
+    std::string ending = ".txt";
+    std::string full_file = filename + ending;
+    std::ofstream file(full_file);
+
+    for (auto& varr : vec){
+        auto v = varr.begin();
+        file << *v;
+        v++;
+
+        for (; v != varr.end(); v++){
+            file << ", " << *v;
+        }
+        file << "\n";
+
+    }
+    file.close();
+    std::cout << "Data saved as: " << full_file << "\n" << std::flush;
+}
 
 
 
@@ -611,11 +639,13 @@ std::vector<Cplx> T, std::vector<int> timesteps, int entries, double SusceptDiff
         }
     }
 
+    std::cout << "Starting\n" << std::flush;
+
     for (int j = 0; j != timesteps.size(); j++){
         int curbond = tdvp_loop(E_vec,C_vec,S_vec,W_vec,Mag_vec,Mag_vec2,H0,psi,T[j],timesteps[j],args,sweeps,curr_beta);
         max_bond = std::max(max_bond,curbond);
     }
-    S_vec = std::log(dims) - S_vec;
+    S_vec = std::log(dims) * LX * LY - S_vec;
 
     {
         std::lock_guard<std::mutex> lock(forloop_mutex);
@@ -748,26 +778,18 @@ void Kitaev_Model::TPQ_MPS(std::vector<int> timesteps, std::vector<double> inter
     }
     xdata.reserve(entries-1);
 
-    std::vector<std::vector<double>> Energies;
     Energies.reserve(Evols);
-    std::vector<std::vector<double>> Flux;
-
-    std::vector<std::vector<double>> Capacity;
-    std::vector<std::vector<double>> Entropy;
     Capacity.reserve(Evols);
     Entropy.reserve(Evols);
     Flux.reserve(Evols);
 
 
-    std::array<std::vector<std::vector<double>>,3> Magnetization;
     for (auto& i : Magnetization){
         i.reserve(Evols);
     }
-    std::array<std::vector<std::vector<double>>,3> Magnetization2;
     for (auto& i : Magnetization2){
         i.reserve(Evols);
     }
-    std::array<std::vector<std::vector<double>>,3> Susceptibility;
     for (auto& i : Susceptibility){
         i.reserve(Evols);
     }

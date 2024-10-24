@@ -96,6 +96,14 @@ class Kitaev_Model{
     std::vector<std::array<double,2>> Chiy;
     std::vector<std::array<double,2>> Chiz;
 
+    std::vector<std::vector<double>> Energies;
+    std::vector<std::vector<double>> Capacity;
+    std::vector<std::vector<double>> Entropy;
+    std::vector<std::vector<double>> Flux;
+    std::array<std::vector<std::vector<double>>,3> Magnetization;
+    std::array<std::vector<std::vector<double>>,3> Magnetization2;
+    std::array<std::vector<std::vector<double>>,3> Susceptibility;
+
     std::vector<double> xdata;
 
     bool Calsusx = false;
@@ -110,27 +118,32 @@ class Kitaev_Model{
     std::array<int,3> get_neighbour_data_tri_periodic(int pos);
 
     std::array<int,3>(*neighfuncs[6])(int);
-
+    
     std::array<int,3> get_neighbour_data(int pos){
         std::array<int,3> n;
 
         switch(Lattice_Type){
             case 1:
                 n = get_neighbour_data_hex(pos);
+                break;
             case 2:
                 n = get_neighbour_data_tri(pos);
+                break;
             case 3:
                 n = get_neighbour_data_hex_periodic(pos);
+                break;
             case 4:
                 n = get_neighbour_data_hex_rev(pos);
+                break;
             case 5:
                 n = get_neighbour_data_hex_rev2(pos);
+                break;
             case 6: 
                 n = get_neighbour_data_tri_periodic(pos);
+                break;
         }
         return n;
     }
-
 
     void add_kitaev_interaction(std::vector<int>& p_vec, int aux, int sec_aux);
     void add_magnetic_interaction(int aux, int sec_aux);
@@ -158,6 +171,9 @@ class Kitaev_Model{
     MPO& H0, MPS& psi, Cplx& t, int TimeSteps, Args& args, itensor::Sweeps& sweeps);
 
     void chi_int(MPS& psi, double n, double t, std::array<std::vector<double>,3>& chi_vec, double step, itensor::Sweeps& sweeps, Args& args);
+
+    template<typename T>
+    void save_data(std::string filename, std::vector<std::vector<T>>& vec);
 
     template<std::size_t n, typename T>
     void save_data(std::string filename, std::vector<std::array<T,n>>& vec);
@@ -240,11 +256,18 @@ class Kitaev_Model{
 
         SusceptIntegral = false;
 
+        std::cout << "Lattice Type: " << Lattice_Type << "\n";
+        PrintData(ampo);
         add_kitaev_interaction(full_points,aux,sec_aux);
+        PrintData(ampo);
         add_magnetic_interaction(aux,sec_aux);
+        PrintData(ampo);
         add_heisenberg_interaction(full_points,aux,sec_aux);
+        PrintData(ampo);
         add_gamma_interaction(full_points,aux,sec_aux);
+        PrintData(ampo);
         add_gammaq_interaction(full_points,aux,sec_aux);
+        PrintData(ampo);
 
         if (DoubleSpin == 1){
             this -> H_flux = honeycomb_flux_operator_half(aux,sec_aux);
@@ -286,13 +309,13 @@ class Kitaev_Model{
         PrintData(ampo);
     }
 
-    void Save(std::string x){
+    void Save(std::string x, bool SaveRaw = false){
         std::filesystem::create_directory(x);
         if (CalcDMRG){
             std::string xGSE = x + "/" + "GSE";
             save_data(xGSE,GSE);
         } 
-        if (CalcTDVP) {
+        if (CalcTDVP){
             std::string xd = x + "/" + "xdata";
             std::string xE = x + "/" + "E";
             std::string xC = x + "/" + "C";
@@ -317,6 +340,30 @@ class Kitaev_Model{
             save_data(xcy2,My2);
             save_data(xcz2,Mz2);
 
+            if (SaveRaw){
+                std::string xEr = x + "/" + "E_raw";
+                std::string xCr = x + "/" + "C_raw";
+                std::string xSr = x + "/" + "S_raw";
+                std::string xWr = x + "/" + "W_raw";
+                std::string xcxr = x + "/" + "Mx_raw";
+                std::string xcyr = x + "/" + "My_raw";
+                std::string xczr = x + "/" + "Mz_raw";
+                std::string xcx2r = x + "/" + "Mx2_raw";
+                std::string xcy2r = x + "/" + "My2_raw";
+                std::string xcz2r = x + "/" + "Mz2_raw";
+
+                save_data(xEr,Energies);
+                save_data(xCr,Capacity);
+                save_data(xSr,Entropy);
+                save_data(xWr,Flux);
+                save_data(xcxr,Magnetization[0]);
+                save_data(xcyr,Magnetization[1]);
+                save_data(xczr,Magnetization[2]);
+                save_data(xcx2r,Magnetization2[0]);
+                save_data(xcy2r,Magnetization2[1]);
+                save_data(xcz2r,Magnetization2[2]);
+            }
+
             if (SusceptIntegral){
                 std::string xchix = x + "/" + "Chix";
                 std::string xchiy = x + "/" + "Chiy";
@@ -330,6 +377,22 @@ class Kitaev_Model{
                 }
                 if (Calsusz){
                     save_data(xchiz,Chiz);
+                }
+
+                if (SaveRaw){
+                    std::string xchixr = x + "/" + "Chix_raw";
+                    std::string xchiyr = x + "/" + "Chiy_raw";
+                    std::string xchizr = x + "/" + "Chiz_raw";
+
+                    if (Calsusx){
+                        save_data(xchixr,Susceptibility[0]);
+                    }
+                    if (Calsusy){
+                        save_data(xchiyr,Susceptibility[1]);
+                    }
+                    if (Calsusz){
+                        save_data(xchizr,Susceptibility[2]);
+                    }                    
                 }
             }
         }

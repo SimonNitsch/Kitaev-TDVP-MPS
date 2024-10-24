@@ -1,18 +1,3 @@
-//
-// Distributed under the ITensor Library License, Version 1.2
-//    (See accompanying LICENSE file.)
-//
-
-/*
-
-This is a modified version of customspin.h from the ITesnor library
-It additionally contains Sx and Sy operators for the CustomSpin class, which are necessary to run the TPQ-MPS scripts
-
-This header file should replace itensor/itensor/mps/sites/customspin.h
-
-*/
-
-
 #pragma once
 
 #include "itensor/mps/siteset.h"
