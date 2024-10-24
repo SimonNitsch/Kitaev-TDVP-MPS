@@ -1,0 +1,45 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "build",
+            "type": "shell",
+            "command": "/usr/bin/g++",  // Adjust path to g++ if necessary
+            "args": [
+                "-g",
+                "${file}",
+                "-std=c++17",
+                "-I",
+                "/afs/itp.tugraz.at/user/nitschs/Documents/itensor",
+                "-I",
+                "/afs/itp.tugraz.at/opt/intel/2018.1/mkl/include",
+                "-I",
+                "/afs/itp.tugraz.at/user/nitschs/Documents/eigen-3.4.0",
+                "-I",
+                "/afs/itp.tugraz.at/user/nitschs/Documents",
+                "-L",
+                "/afs/itp.tugraz.at/user/nitschs/Documents/itensor/lib",
+                "-litensor",
+                "-L",
+                "/afs/itp.tugraz.at/opt/intel/2018.1/mkl/lib/intel64",
+                "-lmkl_intel_lp64",
+                "-lmkl_intel_thread",
+                "-lmkl_rt",
+                "-lmkl_core",
+                "-liomp5",
+                "-lpthread",
+                "-lcblas",
+                "-lopenblas",
+                "-lm",
+                "-ldl",
+                "-o",
+                "${fileDirname}/${fileBasenameNoExtension}"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": ["$gcc"]
+        }
+    ]
+}
