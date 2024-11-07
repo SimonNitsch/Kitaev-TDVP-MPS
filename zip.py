@@ -58,6 +58,7 @@ shutil.copy(xsrc,xdst)
 
 Convert(curdir,folders,destination,"E")
 Convert(curdir,folders,destination,"C")
+Convert(curdir,folders,destination,"C_alt")
 Convert(curdir,folders,destination,"S")
 Convert(curdir,folders,destination,"W")
 Convert(curdir,folders,destination,"Mx")
