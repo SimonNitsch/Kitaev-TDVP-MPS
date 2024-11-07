@@ -33,14 +33,23 @@ def Convert(curdir, folders, destination, quantity):
 
 
 curdir = os.getcwd()
-folders = arguments[1:-1]
-destination = arguments[-1]
+
+destination = arguments[1]
+fnumber = int(arguments[2])
+
+folders = []
+
+for i in range(fnumber):
+    thisf = destination + str(i)
+    folders.append(thisf)
+
+
 
 os.mkdir(destination)
 
-Susceptx = os.path.isfile(os.path.join(curdir,arguments[1],"Chix_raw"))
-Suscepty = os.path.isfile(os.path.join(curdir,arguments[1],"Chiy_raw"))
-Susceptz = os.path.isfile(os.path.join(curdir,arguments[1],"Chiz_raw"))
+Susceptx = os.path.isfile(os.path.join(curdir,folders[0],"Chix_raw"))
+Suscepty = os.path.isfile(os.path.join(curdir,folders[0],"Chiy_raw"))
+Susceptz = os.path.isfile(os.path.join(curdir,folders[0],"Chiz_raw"))
 
 xsrc = os.path.join(curdir,folders[0],"xdata.txt")
 xdst = os.path.join(curdir,destination,"xdata.txt")

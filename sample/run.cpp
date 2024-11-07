@@ -10,14 +10,14 @@ int main(){
     /*
     The class Hamiltonian can be modified with .set(), as demonstrated here.
     Coefficients that can be changed, are:
-    Kx ... Kitaev Interaction in x direction
-    Ky ... Kitaev Interaction in y direction
-    Kz ... Kitaev Interaction in z direction
+    Kx ... Kitaev Interaction in x direction (antiferromagnetic)
+    Ky ... Kitaev Interaction in y direction (antiferromagnetic)
+    Kz ... Kitaev Interaction in z direction (antiferromagnetic)
     K ... Changes Kx, Ky and Kz at once
-    J ... Heisenberg Interaction
-    hx ... Magnetic Field in x direction
-    hy ... Magnetic Field in y direction
-    hz ... Magnetic Field in z direction
+    J ... Heisenberg Interaction (antiferromagnetic)
+    hx ... Magnetic Field in x direction (ferromagnetic)
+    hy ... Magnetic Field in y direction (ferromagnetic)
+    hz ... Magnetic Field in z direction (ferromagnetic)
     Gamma ... Gamma Interaction
     GammaQ ... Gamma' Interaction
     */
@@ -81,6 +81,13 @@ int main(){
     One random MPS is generated and then evolved in imaginary time according to timesteps and intervals
     
     So here, 5 random MPS are generated and evolved in imaginary time
+
+    The time evolutions are parallelized with OpenMP
+    so for this example, one would get significant speedups with multithreading
+    up until 5 cores
+
+    For more parallelization, the MKL multithreading from ITensor can also be used
+    Note that MKL multithreading scales much worse than the automatic parallelization of evolutions
     */
 
 

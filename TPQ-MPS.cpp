@@ -402,7 +402,7 @@ std::vector<std::array<double,2>> Kitaev_Model::Mean(std::vector<std::vector<dou
 
 
 
-int Kitaev_Model::tdvp_loop(std::vector<double>& E_vec, std::vector<double>& C_vec, std::vector<double>& S_vec, std::vector<double>& W_vec,
+int Kitaev_Model::tdvp_loop(std::vector<double>& E_vec, std::vector<double>& C_vec, std::vector<double>& C_alt_vec, std::vector<double>& S_vec, std::vector<double>& W_vec,
 std::array<std::vector<double>,3>& M_vec, std::array<std::vector<double>,3>& M_vec2,
 itensor::MPO& H0, itensor::MPS& psi, itensor::Cplx& t, int TimeSteps, itensor::Args& args, itensor::Sweeps& sweeps, double& cb){
     std::complex<double> tcompl2 = t;
@@ -420,16 +420,17 @@ itensor::MPO& H0, itensor::MPS& psi, itensor::Cplx& t, int TimeSteps, itensor::A
         max_bond = std::max(max_bond,itensor::maxLinkDim(psi));
 
         std::complex<double> w = itensor::innerC(psi,H_flux,psi);
-        //double c = cb * cb * (E_vec.back() - E) / t_beta;
+        double calt = cb * cb * (E_vec.back() - E) / t_beta;
         double c = cb * cb * (E2 - E * E);
         double s = S_vec.back() + t_beta * 0.5 * (c/cb + C_vec.back()/cb_old);
 
         E_vec.push_back(E);
         C_vec.push_back(c);
+        C_alt_vec.push_back(calt);
         S_vec.push_back(s);
         W_vec.push_back(std::real(w)); 
  
-        std::cout << "Current Beta: " << cb << ", Energy: " << E << ", Heat Capacity: " << c << "\n";
+        std::cout << "Current Beta: " << cb << ", Energy: " << E << ", Heat Capacity: " << c << ", Alternative Heat Capacity: " << calt << "\n" << std::flush;
 
 
         for (int indi = 0; indi != 3; indi++){
@@ -438,7 +439,6 @@ itensor::MPO& H0, itensor::MPS& psi, itensor::Cplx& t, int TimeSteps, itensor::A
             std::complex<double> m2 = itensor::innerC(psi,M2[indi],psi);
             M_vec2[indi].push_back(std::real(m2));
         }
-        std::cout << "\n" << std::flush;
     }
     return max_bond;
 }
@@ -551,19 +551,18 @@ void Kitaev_Model::chi_int(itensor::MPS& psi, double n, double t, std::array<std
 
 
 
-void Kitaev_Model::time_evolution(std::vector<std::vector<double>>& Energies, std::vector<std::vector<double>>& Capacity, 
-std::vector<std::vector<double>>& Entropy, std::vector<std::vector<double>>& Flux,
-std::array<std::vector<std::vector<double>>,3>& Magnetization, std::array<std::vector<std::vector<double>>,3>& Magnetization2,
-std::array<std::vector<std::vector<double>>,3>& Susceptibility,
-std::vector<Cplx> T, std::vector<int> timesteps, int entries, double SusceptDiff, int init_rand_sites, int& max_bond, itensor::Args& args, itensor::Sweeps& sweeps){
+void Kitaev_Model::time_evolution(std::vector<Cplx> T, std::vector<int> timesteps, int entries, double SusceptDiff,
+                                    int init_rand_sites,int& max_bond, itensor::Args& args, itensor::Sweeps& sweeps){
 
     std::vector<double> E_vec;
     std::vector<double> C_vec;
+    std::vector<double> C_alt_vec;
     std::vector<double> S_vec;
     std::vector<double> W_vec;
 
     E_vec.reserve(entries);
     C_vec.reserve(entries);
+    C_alt_vec.reserve(entries);
     S_vec.reserve(entries);
     W_vec.reserve(entries);
 
@@ -592,6 +591,7 @@ std::vector<Cplx> T, std::vector<int> timesteps, int entries, double SusceptDiff
     E_vec.push_back(std::real(E));
     W_vec.push_back(0);
     C_vec.push_back(0);
+    C_alt_vec.push_back(0);
     S_vec.push_back(0);
     for (auto& i : Mag_vec){
         i.push_back(0);
@@ -639,10 +639,8 @@ std::vector<Cplx> T, std::vector<int> timesteps, int entries, double SusceptDiff
         }
     }
 
-    std::cout << "Starting\n" << std::flush;
-
     for (int j = 0; j != timesteps.size(); j++){
-        int curbond = tdvp_loop(E_vec,C_vec,S_vec,W_vec,Mag_vec,Mag_vec2,H0,psi,T[j],timesteps[j],args,sweeps,curr_beta);
+        int curbond = tdvp_loop(E_vec,C_vec,C_alt_vec,S_vec,W_vec,Mag_vec,Mag_vec2,H0,psi,T[j],timesteps[j],args,sweeps,curr_beta);
         max_bond = std::max(max_bond,curbond);
     }
     S_vec = std::log(dims) * LX * LY - S_vec;
@@ -653,6 +651,8 @@ std::vector<Cplx> T, std::vector<int> timesteps, int entries, double SusceptDiff
         E_vec.clear();
         Capacity.push_back(C_vec);
         C_vec.clear();
+        Alternative_Capacity.push_back(C_alt_vec);
+        C_alt_vec.clear();
         Entropy.push_back(S_vec);
         S_vec.clear();
         Flux.push_back(W_vec);
@@ -780,6 +780,7 @@ void Kitaev_Model::TPQ_MPS(std::vector<int> timesteps, std::vector<double> inter
 
     Energies.reserve(Evols);
     Capacity.reserve(Evols);
+    Alternative_Capacity.reserve(Evols);
     Entropy.reserve(Evols);
     Flux.reserve(Evols);
 
@@ -838,16 +839,13 @@ void Kitaev_Model::TPQ_MPS(std::vector<int> timesteps, std::vector<double> inter
     int max_bond = 0;
     
     std::vector<std::future<void>> ThreadVector;
-    ThreadVector.reserve(Evols);
+    ThreadVector.reserve(Evols-1);
     std::cout << "\n\n";
     for (int i = 0; i != Evols-1; i++){
-        ThreadVector.push_back(std::async(std::launch::async,[&](){time_evolution(std::ref(Energies),std::ref(Capacity),std::ref(Entropy),std::ref(Flux),
-            std::ref(Magnetization),std::ref(Magnetization2),std::ref(Susceptibility),
-            T,timesteps,entries,SusceptDiff,init_rand_sites,std::ref(max_bond),tdvp_args,Sweeps);}));
+        ThreadVector.push_back(std::async(std::launch::async,[&](){time_evolution(T,timesteps,entries,SusceptDiff,init_rand_sites,std::ref(max_bond),tdvp_args,Sweeps);}));
     }
 
-    time_evolution(Energies,Capacity,Entropy,Flux,Magnetization,Magnetization2,Susceptibility,
-                    T,timesteps,entries,SusceptDiff,init_rand_sites,max_bond,tdvp_args,Sweeps);
+    time_evolution(T,timesteps,entries,SusceptDiff,init_rand_sites,max_bond,tdvp_args,Sweeps);
 
 
     for (auto& i : ThreadVector){
@@ -857,6 +855,7 @@ void Kitaev_Model::TPQ_MPS(std::vector<int> timesteps, std::vector<double> inter
 
     E = Mean(Energies);
     Cv = Mean(Capacity);
+    Cv_alt = Mean(Alternative_Capacity);
     S = Mean(Entropy);
     W = Mean(Flux);
 

@@ -79,11 +79,12 @@ class Kitaev_Model{
     MPO H_flux;
     MPS Htan;
     int LX, LY, aux, sec_aux;
+    double GSE;
 
     private:
-    double GSE;
     std::vector<std::array<double,2>> E;
     std::vector<std::array<double,2>> Cv;
+    std::vector<std::array<double,2>> Cv_alt;
     std::vector<std::array<double,2>> S;
     std::vector<std::array<double,2>> W;
     std::vector<std::array<double,2>> Mx;
@@ -98,6 +99,7 @@ class Kitaev_Model{
 
     std::vector<std::vector<double>> Energies;
     std::vector<std::vector<double>> Capacity;
+    std::vector<std::vector<double>> Alternative_Capacity;
     std::vector<std::vector<double>> Entropy;
     std::vector<std::vector<double>> Flux;
     std::array<std::vector<std::vector<double>>,3> Magnetization;
@@ -157,21 +159,18 @@ class Kitaev_Model{
     
     std::vector<std::array<double,2>> Mean(std::vector<std::vector<double>>& M);
     
-    int tdvp_loop(std::vector<double>& E_vec, std::vector<double>& C_vec, std::vector<double>& S_vec, std::vector<double>& W_vec,
+    int tdvp_loop(std::vector<double>& E_vec, std::vector<double>& C_vec, std::vector<double>& C_alt_vec, std::vector<double>& S_vec, std::vector<double>& W_vec,
     std::array<std::vector<double>,3>& M_vec, std::array<std::vector<double>,3>& M_vec2,
     MPO& H0, MPS& psi, Cplx& t, int TimeSteps, Args& args, itensor::Sweeps& sweeps, double& cb);
 
-    void time_evolution(std::vector<std::vector<double>>& Energies, std::vector<std::vector<double>>& Capacity,
-    std::vector<std::vector<double>>& Entropy, std::vector<std::vector<double>>& Flux,
-    std::array<std::vector<std::vector<double>>,3>& Magnetization, std::array<std::vector<std::vector<double>>,3>& Magnetization2,
-    std::array<std::vector<std::vector<double>>,3>& Susceptibility,
-    std::vector<Cplx> T, std::vector<int> timesteps, int entries, double SusceptDiff, int init_rand_sites, int& max_bond, Args& args, itensor::Sweeps& sweeps);
+    void time_evolution(std::vector<Cplx> T, std::vector<int> timesteps, int entries, double SusceptDiff, int init_rand_sites, int& max_bond, Args& args, itensor::Sweeps& sweeps);
         
     void tdvp_loop(std::array<std::vector<double>,3>& M_vec,
     MPO& H0, MPS& psi, Cplx& t, int TimeSteps, Args& args, itensor::Sweeps& sweeps);
 
     void chi_int(MPS& psi, double n, double t, std::array<std::vector<double>,3>& chi_vec, double step, itensor::Sweeps& sweeps, Args& args);
 
+    public:
     template<typename T>
     void save_data(std::string filename, std::vector<std::vector<T>>& vec);
 
@@ -184,6 +183,7 @@ class Kitaev_Model{
     template<typename T>
     void save_data(std::string filename, T v);
 
+    private:
     std::vector<double> derivative(std::vector<double>& f, double dx);
     std::vector<double> integral(std::vector<double>& f, double dx, double c);
     std::vector<double> multiply(std::vector<double>& a, std::vector<double>& b);
@@ -319,6 +319,7 @@ class Kitaev_Model{
             std::string xd = x + "/" + "xdata";
             std::string xE = x + "/" + "E";
             std::string xC = x + "/" + "C";
+            std::string xCalt = x + "/" + "C_alt";
             std::string xS = x + "/" + "S";
             std::string xW = x + "/" + "W";
             std::string xcx = x + "/" + "Mx";
@@ -331,6 +332,7 @@ class Kitaev_Model{
             save_data(xd,xdata);
             save_data(xE,E);
             save_data(xC,Cv);
+            save_data(xCalt,Cv_alt);
             save_data(xS,S);
             save_data(xW,W);
             save_data(xcx,Mx);
@@ -343,6 +345,7 @@ class Kitaev_Model{
             if (SaveRaw){
                 std::string xEr = x + "/" + "E_raw";
                 std::string xCr = x + "/" + "C_raw";
+                std::string xCaltr = x + "/" + "C_alt_raw";
                 std::string xSr = x + "/" + "S_raw";
                 std::string xWr = x + "/" + "W_raw";
                 std::string xcxr = x + "/" + "Mx_raw";
@@ -354,6 +357,7 @@ class Kitaev_Model{
 
                 save_data(xEr,Energies);
                 save_data(xCr,Capacity);
+                save_data(xCaltr,Alternative_Capacity);
                 save_data(xSr,Entropy);
                 save_data(xWr,Flux);
                 save_data(xcxr,Magnetization[0]);
@@ -399,6 +403,12 @@ class Kitaev_Model{
         
     }
 
+
+    void Save(std::string x, int world_rank){
+        std::string xnew = x + std::to_string(world_rank);
+        Save(xnew,true);
+    }
+
     
     MPS DMRG(int Sweeps=10){
         CalcDMRG = true;
@@ -407,6 +417,7 @@ class Kitaev_Model{
         GSE = energy;
         return psi;
     }
+
 
 
 
