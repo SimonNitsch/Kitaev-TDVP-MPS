@@ -171,7 +171,6 @@ void Kitaev_Model::add_kitaev_interaction(std::vector<int>& p_vec, int aux, int 
     for (int& i : p_vec){
         std::array<int,3> n = get_neighbour_data(i);
         
-        std::cout << "\n";
         if (n[0] != 0){
             ampo += Kx,"Sx",aux_num(i,aux,sec_aux),"Sx",aux_num(n[0],aux,sec_aux);
         }

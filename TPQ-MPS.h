@@ -197,9 +197,10 @@ class Kitaev_Model{
 
     int tan_tdvp_loop(int steps, double dt, MPS& Hexptan, MPO& H0tan, MPO& H2tan,
     std::array<MPO,3>& Mtan, std::array<MPO,3>& M2tan, itensor::Sweeps& sweeps, Args& tdvp_args,
-    std::vector<double>& E_vec, std::vector<double>& C_vec, std::vector<double>& S_vec, std::vector<double>& W_vec,
+    std::vector<double>& E_vec, std::vector<double>& C_vec, std::vector<double>& C_alt_vec,
+    std::vector<double>& S_vec, std::vector<double>& W_vec,
     std::array<std::vector<double>,3>& M_vec, std::array<std::vector<double>,3>& M_vec2,
-    std::array<std::vector<double>,3>& Chi_vec, MPO& Hfluxtan, double& cb, int KrylovExpansions);
+    MPO& Hfluxtan, double& cb, int KrylovExpansions);
     bool SusceptIntegral;
 
     double calculate_chi(MPS& Hexp, MPS& Hexpinv, std::string spin);
@@ -257,17 +258,11 @@ class Kitaev_Model{
         SusceptIntegral = false;
 
         std::cout << "Lattice Type: " << Lattice_Type << "\n";
-        PrintData(ampo);
         add_kitaev_interaction(full_points,aux,sec_aux);
-        PrintData(ampo);
         add_magnetic_interaction(aux,sec_aux);
-        PrintData(ampo);
         add_heisenberg_interaction(full_points,aux,sec_aux);
-        PrintData(ampo);
         add_gamma_interaction(full_points,aux,sec_aux);
-        PrintData(ampo);
         add_gammaq_interaction(full_points,aux,sec_aux);
-        PrintData(ampo);
 
         if (DoubleSpin == 1){
             this -> H_flux = honeycomb_flux_operator_half(aux,sec_aux);
@@ -291,10 +286,6 @@ class Kitaev_Model{
         this->H_Details.print();
         std::cout << "\n\n";
 
-    }
-
-    Kitaev_Model(int LX, int LY, Hamiltonian H_Details, int DoubleSpin, std::string shape){
-        Kitaev_Model(LX,LY,H_Details,DoubleSpin,0,0,shape);
     }
 
 
