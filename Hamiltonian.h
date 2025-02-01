@@ -61,6 +61,12 @@ class Hamiltonian{
         std::cout << "GammaQ: " << H["GammaQ"] << "\n" << std::flush;
     }
 
+    std::vector<double> total_info(){
+        std::vector<double> filev;
+        filev = {H["Kx"], H["Ky"], H["Kz"], H["J"], H["hx"], H["hy"], H["hz"], H["Gamma"], H["GammaQ"]};
+        return filev;
+    }   
+
 
 };
 

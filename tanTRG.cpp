@@ -321,6 +321,8 @@ MPO& Hfluxtan, double& cb, int KrylovExpansions){
         S_vec.push_back(curs);
         W_vec.push_back(curw);
 
+        std::cout << "Current Beta: " << cb << ", Energy: " << cure << ", Heat Capacity: " << curc << ", Alternative Heat Capacity: " << curc_alt << "\n" << std::flush;
+
         for (int indi = 0; indi != 3; indi++){
             std::complex<double> m = innerC(Hexptan,Mtan[indi],Hexptan);
             std::complex<double> m2 = innerC(Hexptan,M2tan[indi],Hexptan);

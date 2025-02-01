@@ -85,6 +85,7 @@ class Kitaev_Model{
     std::vector<std::array<double,2>> E;
     std::vector<std::array<double,2>> Cv;
     std::vector<std::array<double,2>> Cv_alt;
+    std::vector<std::array<double,2>> Cv_O2;
     std::vector<std::array<double,2>> S;
     std::vector<std::array<double,2>> W;
     std::vector<std::array<double,2>> Mx;
@@ -100,13 +101,14 @@ class Kitaev_Model{
     std::vector<std::vector<double>> Energies;
     std::vector<std::vector<double>> Capacity;
     std::vector<std::vector<double>> Alternative_Capacity;
+    std::vector<std::vector<double>> Alternative_Capacity_O2;
     std::vector<std::vector<double>> Entropy;
     std::vector<std::vector<double>> Flux;
     std::array<std::vector<std::vector<double>>,3> Magnetization;
     std::array<std::vector<std::vector<double>>,3> Magnetization2;
     std::array<std::vector<std::vector<double>>,3> Susceptibility;
 
-    std::vector<double> xdata;
+    std::vector<double> xdata, xdatashift;
 
     bool Calsusx = false;
     bool Calsusy = false;
@@ -118,6 +120,9 @@ class Kitaev_Model{
     std::array<int,3> get_neighbour_data_hex_rev2(int pos);
     std::array<int,3> get_neighbour_data_tri(int pos);
     std::array<int,3> get_neighbour_data_tri_periodic(int pos);
+
+    std::string backup_name;
+    std::string Foldername;
 
     std::array<int,3>(*neighfuncs[6])(int);
     
@@ -159,14 +164,17 @@ class Kitaev_Model{
     
     std::vector<std::array<double,2>> Mean(std::vector<std::vector<double>>& M);
     
-    int tdvp_loop(std::vector<double>& E_vec, std::vector<double>& C_vec, std::vector<double>& C_alt_vec, std::vector<double>& S_vec, std::vector<double>& W_vec,
+    int tdvp_loop(std::vector<double>& E_vec, std::vector<double>& C_vec, std::vector<double>& C_alt_vec, std::vector<double>& C_O2_vec, std::vector<double>& S_vec, std::vector<double>& W_vec,
     std::array<std::vector<double>,3>& M_vec, std::array<std::vector<double>,3>& M_vec2,
-    MPO& H0, MPS& psi, Cplx& t, int TimeSteps, Args& args, itensor::Sweeps& sweeps, double& cb);
+    MPO& H0, MPS& psi, Cplx& t, int TimeSteps, Args& args, itensor::Sweeps& sweeps, double& cb, int evnum, int secnum);
 
-    void time_evolution(std::vector<Cplx> T, std::vector<int> timesteps, int entries, double SusceptDiff, int init_rand_sites, int& max_bond, Args& args, itensor::Sweeps& sweeps);
-        
-    void tdvp_loop(std::array<std::vector<double>,3>& M_vec,
-    MPO& H0, MPS& psi, Cplx& t, int TimeSteps, Args& args, itensor::Sweeps& sweeps);
+    void time_evolution(std::vector<Cplx> T, std::vector<int> timesteps, int entries, double SusceptDiff, int init_rand_sites, int& max_bond, Args& args, itensor::Sweeps& sweeps, int evnum);
+    void time_evolution_cont(std::vector<Cplx> T, std::vector<int> timesteps, int entries, double SusceptDiff, int init_rand_sites, int& max_bond, Args& args, Sweeps sweeps, int evnum);
+
+    void tdvp_loop(std::array<std::vector<double>,3>& M_vec, MPO& H0, MPS& psi,
+    Cplx& t, int TimeSteps, Args& args, itensor::Sweeps& sweeps, std::string axis, int evnum, int secnum);
+    void sus_func(std::array<std::vector<double>,3>& M_vec, MPO& H0, MPS& psi, 
+    std::vector<itensor::Cplx>& T, std::vector<int> timesteps, Args& args, itensor::Sweeps& sweeps, std::string axis, int evnum);
 
     void chi_int(MPS& psi, double n, double t, std::array<std::vector<double>,3>& chi_vec, double step, itensor::Sweeps& sweeps, Args& args);
 
@@ -188,6 +196,9 @@ class Kitaev_Model{
     std::vector<double> integral(std::vector<double>& f, double dx, double c);
     std::vector<double> multiply(std::vector<double>& a, std::vector<double>& b);
 
+    template<typename T>
+    void load_vector(std::string filename, std::vector<T>& v);
+
     int dims;
 
     MPS mpo_to_tanmps(MPO& H);
@@ -208,7 +219,7 @@ class Kitaev_Model{
 
 
     public:
-    Kitaev_Model(int LX, int LY, Hamiltonian H_Details, int DoubleSpin, int aux, int sec_aux, std::string shape){
+    Kitaev_Model(int LX, int LY, Hamiltonian H_Details, int DoubleSpin, int aux, int sec_aux, std::string shape, std::string backup = "NULL"){
         this -> sites = CustomSpinNitsch((LX*LY+2*aux+2*sec_aux),{"2S=",DoubleSpin,"ConserveQNs=",false});
         this -> ampo = AutoMPO(sites);
         this -> H_Details = H_Details;
@@ -257,7 +268,6 @@ class Kitaev_Model{
 
         SusceptIntegral = false;
 
-        std::cout << "Lattice Type: " << Lattice_Type << "\n";
         add_kitaev_interaction(full_points,aux,sec_aux);
         add_magnetic_interaction(aux,sec_aux);
         add_heisenberg_interaction(full_points,aux,sec_aux);
@@ -277,6 +287,26 @@ class Kitaev_Model{
         M = Ms[0];
         M2 = Ms[1];
 
+        if (backup == "NULL"){
+            srand(time(NULL));
+            this -> backup_name = std::to_string(rand()) + "_backup";
+        }
+        else{
+            this -> backup_name = backup + "_backup";
+        }
+
+        std::filesystem::create_directory(backup_name);
+        save_data(backup_name+"/LX",LX);
+        save_data(backup_name+"/LY",LY);
+        save_data(backup_name+"/DS",DoubleSpin);
+        save_data(backup_name+"/aux",aux);
+        save_data(backup_name+"/sec_aux",sec_aux);
+        save_data(backup_name+"/LT",Lattice_Type);
+
+        std::vector<double> Hinf = this->H_Details.total_info();
+        save_data(backup_name+"/H",Hinf);
+        writeToFile(backup_name+"/sites",this->sites);
+
         std::cout << "Spin " << DoubleSpin << "/2 System" << "\n";
         std::cout << "Lattice Type: " << shape << "\n";
         std::cout << "LX = " << LX << ", LY = " << LY << "\n";
@@ -292,6 +322,8 @@ class Kitaev_Model{
     void TPQ_MPS(std::vector<int> timesteps, std::vector<double> intervals, int Evols, int max_sites=512, int init_rand_sites=64, std::string TDVP_Type="TwoSite", double SusceptDiff=0, std::string Suscepts="xyz");
     void tanTRG(std::vector<int> timesteps, std::vector<double> intervals, int max_sites=256, int KrylovExpansions=0);
 
+    Kitaev_Model(std::string backup_name);
+
     Hamiltonian Get_Constants(){
         return H_Details;
     }
@@ -300,30 +332,34 @@ class Kitaev_Model{
         PrintData(ampo);
     }
 
-    void Save(std::string x, bool SaveRaw = false){
-        std::filesystem::create_directory(x);
+    void Save(bool SaveRaw = false){
+        std::filesystem::create_directory(Foldername);
         if (CalcDMRG){
-            std::string xGSE = x + "/" + "GSE";
+            std::string xGSE = Foldername + "/" + "GSE";
             save_data(xGSE,GSE);
         } 
         if (CalcTDVP){
-            std::string xd = x + "/" + "xdata";
-            std::string xE = x + "/" + "E";
-            std::string xC = x + "/" + "C";
-            std::string xCalt = x + "/" + "C_alt";
-            std::string xS = x + "/" + "S";
-            std::string xW = x + "/" + "W";
-            std::string xcx = x + "/" + "Mx";
-            std::string xcy = x + "/" + "My";
-            std::string xcz = x + "/" + "Mz";
-            std::string xcx2 = x + "/" + "Mx2";
-            std::string xcy2 = x + "/" + "My2";
-            std::string xcz2 = x + "/" + "Mz2";
+            std::string xd = Foldername + "/" + "xdata";
+            std::string xds = Foldername + "/" + "xdatashift";
+            std::string xE = Foldername + "/" + "E";
+            std::string xC = Foldername + "/" + "C";
+            std::string xCalt = Foldername + "/" + "C_alt";
+            std::string xCo2 = Foldername + "/" + "C_alt_O2";
+            std::string xS = Foldername + "/" + "S";
+            std::string xW = Foldername + "/" + "W";
+            std::string xcx = Foldername + "/" + "Mx";
+            std::string xcy = Foldername + "/" + "My";
+            std::string xcz = Foldername + "/" + "Mz";
+            std::string xcx2 = Foldername + "/" + "Mx2";
+            std::string xcy2 = Foldername + "/" + "My2";
+            std::string xcz2 = Foldername + "/" + "Mz2";
 
             save_data(xd,xdata);
+            save_data(xds,xdatashift);
             save_data(xE,E);
             save_data(xC,Cv);
             save_data(xCalt,Cv_alt);
+            save_data(xCo2,Cv_O2);
             save_data(xS,S);
             save_data(xW,W);
             save_data(xcx,Mx);
@@ -334,21 +370,23 @@ class Kitaev_Model{
             save_data(xcz2,Mz2);
 
             if (SaveRaw){
-                std::string xEr = x + "/" + "E_raw";
-                std::string xCr = x + "/" + "C_raw";
-                std::string xCaltr = x + "/" + "C_alt_raw";
-                std::string xSr = x + "/" + "S_raw";
-                std::string xWr = x + "/" + "W_raw";
-                std::string xcxr = x + "/" + "Mx_raw";
-                std::string xcyr = x + "/" + "My_raw";
-                std::string xczr = x + "/" + "Mz_raw";
-                std::string xcx2r = x + "/" + "Mx2_raw";
-                std::string xcy2r = x + "/" + "My2_raw";
-                std::string xcz2r = x + "/" + "Mz2_raw";
+                std::string xEr = Foldername + "/" + "E_raw";
+                std::string xCr = Foldername + "/" + "C_raw";
+                std::string xCaltr = Foldername + "/" + "C_alt_raw";
+                std::string xCo2 = Foldername + "/" + "C_alt_O2_raw";
+                std::string xSr = Foldername + "/" + "S_raw";
+                std::string xWr = Foldername + "/" + "W_raw";
+                std::string xcxr = Foldername + "/" + "Mx_raw";
+                std::string xcyr = Foldername + "/" + "My_raw";
+                std::string xczr = Foldername + "/" + "Mz_raw";
+                std::string xcx2r = Foldername + "/" + "Mx2_raw";
+                std::string xcy2r = Foldername + "/" + "My2_raw";
+                std::string xcz2r = Foldername + "/" + "Mz2_raw";
 
                 save_data(xEr,Energies);
                 save_data(xCr,Capacity);
                 save_data(xCaltr,Alternative_Capacity);
+                save_data(xCo2,Alternative_Capacity_O2);
                 save_data(xSr,Entropy);
                 save_data(xWr,Flux);
                 save_data(xcxr,Magnetization[0]);
@@ -360,9 +398,9 @@ class Kitaev_Model{
             }
 
             if (SusceptIntegral){
-                std::string xchix = x + "/" + "Chix";
-                std::string xchiy = x + "/" + "Chiy";
-                std::string xchiz = x + "/" + "Chiz";
+                std::string xchix = Foldername + "/" + "Chix";
+                std::string xchiy = Foldername + "/" + "Chiy";
+                std::string xchiz = Foldername + "/" + "Chiz";
 
                 if (Calsusx){
                     save_data(xchix,Chix);
@@ -375,9 +413,9 @@ class Kitaev_Model{
                 }
 
                 if (SaveRaw){
-                    std::string xchixr = x + "/" + "Chix_raw";
-                    std::string xchiyr = x + "/" + "Chiy_raw";
-                    std::string xchizr = x + "/" + "Chiz_raw";
+                    std::string xchixr = Foldername + "/" + "Chix_raw";
+                    std::string xchiyr = Foldername + "/" + "Chiy_raw";
+                    std::string xchizr = Foldername + "/" + "Chiz_raw";
 
                     if (Calsusx){
                         save_data(xchixr,Susceptibility[0]);
@@ -392,13 +430,31 @@ class Kitaev_Model{
             }
         }
         
+        std::filesystem::remove_all(backup_name);
     }
 
 
-    void Save(std::string x, int world_rank){
-        std::string xnew = x + std::to_string(world_rank);
+    void Save(int world_rank){
+        std::string xnew = Foldername + std::to_string(world_rank);
         Save(xnew,true);
     }
+
+    void Save(std::string x, bool SaveRaw = false){
+        Foldername = x;
+        Save(SaveRaw);
+    }
+
+    void Save(std::string x, int world_rank){
+        Foldername = x;
+        Save(world_rank);
+    }
+
+    void Set_Foldername(std::string x){
+        Foldername = x;
+        save_data(backup_name+"/foldername",Foldername);
+    }
+
+    
 
     
     MPS DMRG(int Sweeps=10){

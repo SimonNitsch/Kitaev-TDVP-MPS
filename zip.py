@@ -47,9 +47,11 @@ for i in range(fnumber):
 
 os.mkdir(destination)
 
-Susceptx = os.path.isfile(os.path.join(curdir,folders[0],"Chix_raw"))
-Suscepty = os.path.isfile(os.path.join(curdir,folders[0],"Chiy_raw"))
-Susceptz = os.path.isfile(os.path.join(curdir,folders[0],"Chiz_raw"))
+Susceptx = os.path.isfile(os.path.join(curdir,folders[0],"Chix_raw.txt"))
+Suscepty = os.path.isfile(os.path.join(curdir,folders[0],"Chiy_raw.txt"))
+Susceptz = os.path.isfile(os.path.join(curdir,folders[0],"Chiz_raw.txt"))
+
+C_o2 = os.path.isfile(os.path.join(curdir,folders[0],"C_alt_O2_raw.txt"))
 
 xsrc = os.path.join(curdir,folders[0],"xdata.txt")
 xdst = os.path.join(curdir,destination,"xdata.txt")
@@ -74,6 +76,8 @@ if Suscepty:
     Convert(curdir,folders,destination,"Chiy")
 if Susceptz:
     Convert(curdir,folders,destination,"Chiz")
+if C_o2:
+    Convert(curdir,folders,destination,"C_alt_O2")
 
 
 

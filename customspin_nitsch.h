@@ -20,11 +20,10 @@ using CustomSpinNitsch = BasicSiteSet<CustomSpinNitschSite>;
 class CustomSpinNitschSite
     {
     Index s;
-    static bool is_called;
-    static std::array<std::vector<std::vector<Cplx>>,3> SpinExp;
+    mutable std::array<std::vector<std::vector<Cplx>>,3> SpinExp;
 
 
-    static std::array<std::vector<std::vector<Cplx>>,3> ExpMatrix(int DoubleSpin){
+    std::array<std::vector<std::vector<Cplx>>,3> ExpMatrix(int DoubleSpin) const{
         int dims = DoubleSpin + 1;
         double DSdouble = static_cast<double>(DoubleSpin);
         Eigen::MatrixX<Cplx> Sx = Eigen::MatrixX<Cplx>::Zero(dims,dims);
@@ -48,9 +47,9 @@ class CustomSpinNitschSite
             Sz(i,i) = sz * M_PI * Cplx_i;
         }
         std::array<Eigen::MatrixX<Cplx>,3> ExpEig;
-        ExpEig[0] = Sx.exp();
-        ExpEig[1] = Sy.exp();
-        ExpEig[2] = Sz.exp();
+        ExpEig[0] = Sx.exp() * (-1.);
+        ExpEig[1] = Sy.exp() * (-1.);
+        ExpEig[2] = Sz.exp() * (-1.);
 
         std::array<std::vector<std::vector<Cplx>>,3> ExpVec;
         for (int i = 0; i < 3; i++) {
@@ -100,10 +99,7 @@ class CustomSpinNitschSite
 
         if(DSmax < 1) error(tinyformat::format("Invalid spin value %d/2 in CustomSpinNitsch",DSmax));
         
-        if (is_called == false){
-            CustomSpinNitschSite::SpinExp = CustomSpinNitschSite::ExpMatrix(DSmax);
-            CustomSpinNitschSite::is_called = true;
-        }
+        SpinExp = ExpMatrix(DSmax);
 
         auto tags = TagSet(tinyformat::format("Site,S=%d/2",DSmax));
         if(args.defined("SiteNumber") )
@@ -228,34 +224,56 @@ class CustomSpinNitschSite
 	    }
     else
     if(opname == "Expx"){
+        if (SpinExp[0].size() == 0){
+            SpinExp = ExpMatrix(DSmax);
+        }
+
+        std::cout << "Expx: " << dim(s) << "\n" << std::flush;
         auto ExMat = SpinExp[0];
+        std::cout << "isses hier? " << ExMat.size() << "\n" << std::flush;
         for (int i = 0; i != dim(s); i++){
             for (int j = 0; j != dim(s); j++){
                 Cplx Ex = ExMat[i][j];
+                std::cout << Ex << " " << std::flush;
                 Op.set(s(j+1),sP(i+1),Ex);
             }
+            std::cout << "\n" << std::flush;
         }
         //std::cout << "Expx: \n";
     }
     else
     if(opname == "Expy"){
+        if (SpinExp[1].size() == 0){
+            SpinExp = ExpMatrix(DSmax);
+        }
+
+        std::cout << "Expy: \n" << std::flush;
         auto ExMat = SpinExp[1];
         for (int i = 0; i != dim(s); i++){
             for (int j = 0; j != dim(s); j++){
                 Cplx Ex = ExMat[i][j];
                 Op.set(s(j+1),sP(i+1),Ex);
+                std::cout << Ex << " " << std::flush;
             }
+            std::cout << "\n" << std::flush;
         }
         //std::cout << "Expy: \n";
     }
     else
     if(opname == "Expz"){
+        if (SpinExp[2].size() == 0){
+            SpinExp = ExpMatrix(DSmax);
+        }
+
+        std::cout << "Expz: \n" << std::flush;
         auto ExMat = SpinExp[2];
         for (int i = 0; i != dim(s); i++){
             for (int j = 0; j != dim(s); j++){
                 Cplx Ex = ExMat[i][j];
-                Op.set(s(j+1),sP(i+1),Ex);        
+                Op.set(s(j+1),sP(i+1),Ex);   
+                std::cout << Ex << " " << std::flush;     
             }
+            std::cout << "\n" << std::flush;
         }
         //std::cout << "Expz \n";
     }
@@ -302,9 +320,6 @@ class CustomSpinNitschSite
     };
 
 
-
-std::array<std::vector<std::vector<Cplx>>,3> CustomSpinNitschSite::SpinExp;
-bool CustomSpinNitschSite::is_called = false;
 
 
 

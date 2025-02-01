@@ -321,11 +321,12 @@ itensor::MPO Kitaev_Model::honeycomb_flux_operator(int aux, int sec_aux){
     int Py = std::max((LY/2)-1,0);
     int Px = LX-1;
     auto fluxop = itensor::AutoMPO(sites);
-    double Wfac = -1. / static_cast<double>(Px) / static_cast<double>(Py);
+    double Wfac = 1. / static_cast<double>(Px) / static_cast<double>(Py);
+    //std::cout << "Px: " << Px << " Py: " << Py << "\n" << std::flush;
 
     for (int i = 0; i != Px; i++){
         for (int j = 0; j != Py; j++){
-            int f_prot = LY*i + 2*j + 2 + aux;
+            int f_prot = LY*i + 2*j + 2;
 
             int f1 = aux_num(f_prot,aux,sec_aux);
             int f2 = aux_num(f_prot+1,aux,sec_aux);
@@ -333,10 +334,12 @@ itensor::MPO Kitaev_Model::honeycomb_flux_operator(int aux, int sec_aux){
             int f4 = aux_num(f_prot+LY+1,aux,sec_aux);
             int f5 = aux_num(f_prot+LY,aux,sec_aux);
             int f6 = aux_num(f_prot+LY-1,aux,sec_aux);
+            std::cout << Wfac << ", " << f1 << ", " << f2 << ", " << f3 << ", " << f4 << ", " << f5 << ", " << f6 << "\n" << std::flush;
 
-            fluxop += Wfac,"Expx",f1,"Expy",f2,"Expz",f3,"Expx",f4,"Expy",f5,"Expz",f6;
+            fluxop += Wfac,"Expz",f1,"Expz",f2,"Expx",f2,"Expx",f3,"Expy",f3,"Expy",f4,"Expz",f4,"Expz",f5,"Expx",f5,"Expx",f6,"Expy",f6,"Expy",f1;
         }
     }    
+    itensor::PrintData(fluxop); 
     auto fluxH = itensor::toMPO(fluxop);
     return fluxH;
 }
@@ -401,9 +404,9 @@ std::vector<std::array<double,2>> Kitaev_Model::Mean(std::vector<std::vector<dou
 
 
 
-int Kitaev_Model::tdvp_loop(std::vector<double>& E_vec, std::vector<double>& C_vec, std::vector<double>& C_alt_vec, std::vector<double>& S_vec, std::vector<double>& W_vec,
+int Kitaev_Model::tdvp_loop(std::vector<double>& E_vec, std::vector<double>& C_vec, std::vector<double>& C_alt_vec, std::vector<double>& C_O2_vec, std::vector<double>& S_vec, std::vector<double>& W_vec,
 std::array<std::vector<double>,3>& M_vec, std::array<std::vector<double>,3>& M_vec2,
-itensor::MPO& H0, itensor::MPS& psi, itensor::Cplx& t, int TimeSteps, itensor::Args& args, itensor::Sweeps& sweeps, double& cb){
+itensor::MPO& H0, itensor::MPS& psi, itensor::Cplx& t, int TimeSteps, itensor::Args& args, itensor::Sweeps& sweeps, double& cb, int evnum, int secnum){
     std::complex<double> tcompl2 = t;
     double t_beta = std::real(tcompl2) * -2;
     int max_bond = 0;
@@ -413,19 +416,23 @@ itensor::MPO& H0, itensor::MPS& psi, itensor::Cplx& t, int TimeSteps, itensor::A
         if (cb_old == 0){
             cb_old = 1;
         }
+        double cbhalf = cb + t_beta / 2.;
         cb += t_beta;
+
         double E = itensor::tdvp(psi,H0,t,sweeps,args);
         double E2 = std::real(itensor::innerC(psi,H0,H0,psi));
         max_bond = std::max(max_bond,itensor::maxLinkDim(psi));
 
         std::complex<double> w = itensor::innerC(psi,H_flux,psi);
         double calt = cb * cb * (E_vec.back() - E) / t_beta;
+        double co2 = cbhalf * cbhalf * (E_vec.back() - E) / t_beta;
         double c = cb * cb * (E2 - E * E);
-        double s = S_vec.back() + t_beta * 0.5 * (c/cb + C_vec.back()/cb_old);
+        double s = S_vec.back() + cb_old * E_vec.back() - cb * E + t_beta * 0.5 * (E + E_vec.back());
 
         E_vec.push_back(E);
         C_vec.push_back(c);
         C_alt_vec.push_back(calt);
+        C_O2_vec.push_back(co2);
         S_vec.push_back(s);
         W_vec.push_back(std::real(w)); 
  
@@ -439,12 +446,45 @@ itensor::MPO& H0, itensor::MPS& psi, itensor::Cplx& t, int TimeSteps, itensor::A
             M_vec2[indi].push_back(std::real(m2));
         }
     }
+    
+    std::string datf = backup_name + "/" + std::to_string(evnum);
+    std::string datfbak = datf + "bak" + std::to_string(secnum);
+    if (std::filesystem::exists(datfbak)){
+        std::filesystem::remove_all(datfbak);
+    }
+
+    std::filesystem::rename(datf, datfbak);
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+
+    std::filesystem::create_directory(datf);
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+
+    save_data(datf + "/Evec", E_vec);
+    save_data(datf + "/Cvec", C_vec);
+    save_data(datf + "/Caltvec", C_alt_vec);
+    save_data(datf + "/CO2vec", C_O2_vec);
+    save_data(datf + "/Svec", S_vec);
+    save_data(datf + "/Wvec", W_vec);
+    save_data(datf + "/Mvecx", M_vec[0]);
+    save_data(datf + "/Mvecy", M_vec[1]);
+    save_data(datf + "/Mvecz", M_vec[2]);
+    save_data(datf + "/Mvecx2", M_vec2[0]);
+    save_data(datf + "/Mvecy2", M_vec2[1]);
+    save_data(datf + "/Mvecz2", M_vec2[2]);
+    save_data(datf + "/section", secnum);
+
+    itensor::writeToFile(datf + "/psi",psi);
+
+    if (secnum != 0){
+        std::filesystem::remove_all(datf + "bak" + std::to_string(secnum-1));
+    }
+
     return max_bond;
 }
 
 
-void Kitaev_Model::tdvp_loop(std::array<std::vector<double>,3>& M_vec,
-itensor::MPO& H0, itensor::MPS& psi, itensor::Cplx& t, int TimeSteps, itensor::Args& args, itensor::Sweeps& sweeps){
+void Kitaev_Model::tdvp_loop(std::array<std::vector<double>,3>& M_vec, itensor::MPO& H0, itensor::MPS& psi,
+itensor::Cplx& t, int TimeSteps, itensor::Args& args, itensor::Sweeps& sweeps, std::string axis, int evnum, int secnum){
     std::complex<double> tcompl2 = t;
     double t_beta = std::real(tcompl2) * -2;
 
@@ -455,6 +495,24 @@ itensor::MPO& H0, itensor::MPS& psi, itensor::Cplx& t, int TimeSteps, itensor::A
             std::complex<double> m = itensor::innerC(psi,M[indi],psi);
             M_vec[indi].push_back(std::real(m));
         }
+    }
+
+    std::string datf = backup_name + "/" + std::to_string(evnum) + axis;
+    std::filesystem::rename(datf, datf + "bak" + std::to_string(secnum));
+    std::filesystem::create_directory(datf);
+
+    save_data(datf + "/Mvecx", M_vec[0]);
+    save_data(datf + "/Mvecy", M_vec[1]);
+    save_data(datf + "/Mvecz", M_vec[2]);
+
+}
+
+
+
+void Kitaev_Model::sus_func(std::array<std::vector<double>,3>& M_vec, itensor::MPO& H0, itensor::MPS& psi, 
+std::vector<itensor::Cplx>& T, std::vector<int> timesteps, Args& args, itensor::Sweeps& sweeps, std::string axis, int evnum){
+    for (int j = 0; j != timesteps.size(); j++){
+        tdvp_loop(M_vec,H0,psi,T[j],timesteps[j],args,sweeps,axis,evnum,j);
     }
 }
 
@@ -551,10 +609,11 @@ void Kitaev_Model::chi_int(itensor::MPS& psi, double n, double t, std::array<std
 
 
 void Kitaev_Model::time_evolution(std::vector<Cplx> T, std::vector<int> timesteps, int entries, double SusceptDiff,
-                                    int init_rand_sites,int& max_bond, itensor::Args& args, itensor::Sweeps& sweeps){
+                                    int init_rand_sites,int& max_bond, itensor::Args& args, itensor::Sweeps& sweeps, int evnum){
 
     std::vector<double> E_vec;
     std::vector<double> C_vec;
+     std::vector<double> C_O2_vec;
     std::vector<double> C_alt_vec;
     std::vector<double> S_vec;
     std::vector<double> W_vec;
@@ -562,6 +621,7 @@ void Kitaev_Model::time_evolution(std::vector<Cplx> T, std::vector<int> timestep
     E_vec.reserve(entries);
     C_vec.reserve(entries);
     C_alt_vec.reserve(entries);
+    C_O2_vec.reserve(entries);
     S_vec.reserve(entries);
     W_vec.reserve(entries);
 
@@ -591,6 +651,7 @@ void Kitaev_Model::time_evolution(std::vector<Cplx> T, std::vector<int> timestep
     W_vec.push_back(0);
     C_vec.push_back(0);
     C_alt_vec.push_back(0);
+    C_O2_vec.push_back(0);
     S_vec.push_back(0);
     for (auto& i : Mag_vec){
         i.push_back(0);
@@ -601,6 +662,8 @@ void Kitaev_Model::time_evolution(std::vector<Cplx> T, std::vector<int> timestep
         //double n = 1;
 
     std::vector<std::future<void>> SusFut;
+
+    std::filesystem::create_directory(backup_name + "/" + std::to_string(evnum));
 
     if (SusceptIntegral){
         SusFut.reserve(3);
@@ -624,25 +687,27 @@ void Kitaev_Model::time_evolution(std::vector<Cplx> T, std::vector<int> timestep
             i.push_back(0);
         }
 
-
-        for (int j = 0; j != timesteps.size(); j++){
-            if (Calsusx){
-                SusFut.push_back(std::async(std::launch::async,[&](){tdvp_loop(Mag_vec_nextx,H0x,psix,T[j],timesteps[j],args,sweeps);}));
-            }
-            if (Calsusy){
-                SusFut.push_back(std::async(std::launch::async,[&](){tdvp_loop(Mag_vec_nexty,H0y,psiz,T[j],timesteps[j],args,sweeps);}));
-            }
-            if (Calsusz){
-                SusFut.push_back(std::async(std::launch::async,[&](){tdvp_loop(Mag_vec_nextz,H0z,psiy,T[j],timesteps[j],args,sweeps);}));
-            }
+        if (Calsusx){
+            std::filesystem::create_directory(backup_name + "/" + std::to_string(evnum) + "x");
+            SusFut.push_back(std::async(std::launch::async,[&](){sus_func(Mag_vec_nextx,H0x,psix,T,timesteps,args,sweeps,"x",evnum);}));
         }
+        if (Calsusy){
+            std::filesystem::create_directory(backup_name + "/" + std::to_string(evnum) + "y");
+            SusFut.push_back(std::async(std::launch::async,[&](){sus_func(Mag_vec_nexty,H0y,psiy,T,timesteps,args,sweeps,"y",evnum);}));
+        }
+        if (Calsusz){
+            std::filesystem::create_directory(backup_name + "/" + std::to_string(evnum) + "z");
+            SusFut.push_back(std::async(std::launch::async,[&](){sus_func(Mag_vec_nextz,H0z,psiz,T,timesteps,args,sweeps,"z",evnum);}));
+        }
+
     }
+
 
     for (int j = 0; j != timesteps.size(); j++){
-        int curbond = tdvp_loop(E_vec,C_vec,C_alt_vec,S_vec,W_vec,Mag_vec,Mag_vec2,H0,psi,T[j],timesteps[j],args,sweeps,curr_beta);
+        int curbond = tdvp_loop(E_vec,C_vec,C_alt_vec,C_O2_vec,S_vec,W_vec,Mag_vec,Mag_vec2,H0,psi,T[j],timesteps[j],args,sweeps,curr_beta,evnum,j);
         max_bond = std::max(max_bond,curbond);
     }
-    S_vec = std::log(dims) * LX * LY - S_vec;
+    S_vec = std::log(dims) * static_cast<double>(LX) * static_cast<double>(LY) - S_vec;
 
     {
         std::lock_guard<std::mutex> lock(forloop_mutex);
@@ -652,6 +717,8 @@ void Kitaev_Model::time_evolution(std::vector<Cplx> T, std::vector<int> timestep
         C_vec.clear();
         Alternative_Capacity.push_back(C_alt_vec);
         C_alt_vec.clear();
+        Alternative_Capacity_O2.push_back(C_O2_vec);
+        C_O2_vec.clear();
         Entropy.push_back(S_vec);
         S_vec.clear();
         Flux.push_back(W_vec);
@@ -697,6 +764,110 @@ void Kitaev_Model::time_evolution(std::vector<Cplx> T, std::vector<int> timestep
 
 
 
+}
+
+
+
+
+void Kitaev_Model::time_evolution_cont(std::vector<itensor::Cplx> T, std::vector<int> timesteps, int entries, double SusceptDiff, int init_rand_sites, int& max_bond, itensor::Args& args, itensor::Sweeps sweeps, int evnum){
+
+    std::string cfname = backup_name + "/" + std::to_string(evnum);
+
+    int sec;
+    std::ifstream file1(cfname + "/section.txt");
+    file1 >> sec;
+    file1.close();
+
+    std::vector<double> E_vec, C_vec, C_alt_vec, C_O2_vec, S_vec, W_vec;
+    E_vec.reserve(entries);
+    C_vec.reserve(entries);
+    C_alt_vec.reserve(entries);
+    C_O2_vec.reserve(entries);
+    S_vec.reserve(entries);
+    W_vec.reserve(entries);
+    
+    std::array<std::vector<double>,3> Mag_vec, Mag_vec2;
+    for (int i = 0; i != 3; i++){
+        Mag_vec[i].reserve(entries);
+        Mag_vec2[i].reserve(entries);
+    }
+
+    load_vector(cfname + "/Evec.txt", E_vec);
+    load_vector(cfname + "/Cvec.txt", C_vec);
+    load_vector(cfname + "/Caltvec.txt", C_alt_vec);
+    load_vector(cfname + "/CO2vec.txt", C_O2_vec);
+    load_vector(cfname + "/Svec.txt", S_vec);
+    load_vector(cfname + "/Wvec.txt", W_vec);
+
+    load_vector(cfname + "/Mvecx.txt", Mag_vec[0]);
+    load_vector(cfname + "/Mvecy.txt", Mag_vec[1]);
+    load_vector(cfname + "/Mvecz.txt", Mag_vec[2]);
+    load_vector(cfname + "/Mvecx2.txt", Mag_vec2[0]);
+    load_vector(cfname + "/Mvecy2.txt", Mag_vec2[1]);
+    load_vector(cfname + "/Mvecz2.txt", Mag_vec2[2]);
+
+    auto psi = itensor::MPS(sites);
+    itensor::readFromFile(cfname + "/psi", psi);
+
+    double curr_beta = 0;
+    for (int i = 0; i != sec+1; i++){
+        curr_beta += std::real(T[i]) * -2 * timesteps[i];
+    }
+
+    
+    auto t1 = std::chrono::system_clock::now();
+
+    for (int i = sec+1; i != timesteps.size(); i++){
+        int curbond = tdvp_loop(E_vec,C_vec,C_alt_vec,C_O2_vec,S_vec,W_vec,Mag_vec,Mag_vec2,
+            H0,psi,T[i],timesteps[i],args,sweeps,curr_beta,evnum,i);
+        max_bond = std::max(max_bond,curbond);
+    }
+    S_vec = std::log(dims) * LX * LY - S_vec;
+
+    {
+        std::lock_guard<std::mutex> lock(forloop_mutex);
+        Energies.push_back(E_vec);
+        E_vec.clear();
+        Capacity.push_back(C_vec);
+        C_vec.clear();
+        Alternative_Capacity.push_back(C_alt_vec);
+        C_alt_vec.clear();
+        Alternative_Capacity_O2.push_back(C_O2_vec);
+        C_O2_vec.clear();
+        Entropy.push_back(S_vec);
+        S_vec.clear();
+        Flux.push_back(W_vec);
+        W_vec.clear();
+
+        for (int j = 0; j != 3; j++){
+            Magnetization[j].push_back(Mag_vec[j]);
+            Magnetization2[j].push_back(Mag_vec2[j]);
+            Mag_vec[j].clear();
+            Mag_vec2[j].clear();
+        }
+    }
+
+
+    auto t2 = std::chrono::system_clock::now();
+    auto time = std::chrono::duration<double>(t2-t1);
+    std::cout << "Finished Evolution ID " << std::this_thread::get_id() << ", Time Needed: " << time.count() << " Seconds\n" << std::flush;
+
+
+
+
+}
+
+
+template<typename T>
+void Kitaev_Model::load_vector(std::string filename, std::vector<T>& v){
+    std::cout << "File: " << filename << "\n" << std::flush;
+    T ent;
+    std::ifstream file(filename);
+    
+    while (file >> ent){
+        v.push_back(ent);
+    }
+    std::cout << filename << " finished\n" << std::flush;
 }
 
 
@@ -767,6 +938,14 @@ void Kitaev_Model::TPQ_MPS(std::vector<int> timesteps, std::vector<double> inter
     Calsusx = Suscepts.find("x") != std::string::npos;
     Calsusy = Suscepts.find("y") != std::string::npos;
     Calsusz = Suscepts.find("z") != std::string::npos;
+
+    int casintx = static_cast<int>(Calsusx);
+    int casinty = static_cast<int>(Calsusy);
+    int casintz = static_cast<int>(Calsusz);
+
+    save_data(backup_name+"/chix",casintx);
+    save_data(backup_name+"/chiy",casinty);
+    save_data(backup_name+"/chiz",casintz);
     
     if (timesteps.size() != intervals.size()){
         std::invalid_argument("Time Steps vector and Intervals vector have to have the same length");
@@ -813,8 +992,12 @@ void Kitaev_Model::TPQ_MPS(std::vector<int> timesteps, std::vector<double> inter
     itensor::Args tdvp_args;
     if (TDVP_Type == "TwoSite") {
         tdvp_args = itensor::Args({"Silent",true,"ErrGoal",1E-7});
+        int tsave = 2;
+        save_data(backup_name+"/TDVP",tsave);
     } else {
         tdvp_args = itensor::Args({"Silent",true,"ErrGoal",1E-7,"NumCenter",1});
+        int tsave = 1;
+        save_data(backup_name+"/TDVP",tsave);
     }
     Sweeps.maxdim() = max_sites;
     Sweeps.cutoff() = 1e-10;
@@ -823,17 +1006,31 @@ void Kitaev_Model::TPQ_MPS(std::vector<int> timesteps, std::vector<double> inter
     std::cout << "TDVP Technique used: " << TDVP_Type << "\n";
 
     std::vector<itensor::Cplx> T;
+    std::vector<double> Tsave;
     double xsum = 0.;
     for (int i = 0; i != timesteps.size(); i++){
-        itensor::Cplx t = -0.5 * intervals[i] / static_cast<double>(timesteps[i]) * itensor::Cplx_1;
+        double t_doub = -0.5 * intervals[i] / static_cast<double>(timesteps[i]);
+        itensor::Cplx t = t_doub * itensor::Cplx_1;
+        Tsave.push_back(t_doub);
         T.emplace_back(t);
 
         for (int j = 0; j != timesteps[i]; j++){
             double delb = std::real(t) * -2.;
+            double xsumshift = xsum + delb / 2.;
             xsum += delb;
             xdata.push_back(1./xsum);
+            xdatashift.push_back(1./xsumshift);
         }
     }
+
+    save_data(backup_name+"/Evols",Evols);
+    save_data(backup_name+"/T",Tsave);
+    save_data(backup_name+"/timesteps",timesteps);
+    save_data(backup_name+"/minsites",init_rand_sites);
+    save_data(backup_name+"/maxsites",max_sites);
+    save_data(backup_name+"/Susdiff",SusceptDiff);
+
+
     auto t0 = std::chrono::system_clock::now();
     int max_bond = 0;
     
@@ -841,10 +1038,13 @@ void Kitaev_Model::TPQ_MPS(std::vector<int> timesteps, std::vector<double> inter
     ThreadVector.reserve(Evols-1);
     std::cout << "\n\n";
     for (int i = 0; i != Evols-1; i++){
-        ThreadVector.push_back(std::async(std::launch::async,[&](){time_evolution(T,timesteps,entries,SusceptDiff,init_rand_sites,std::ref(max_bond),tdvp_args,Sweeps);}));
+        int evnum = i+1;
+        ThreadVector.push_back(std::async(std::launch::async,[&](){time_evolution(T,timesteps,entries,SusceptDiff,init_rand_sites,std::ref(max_bond),tdvp_args,Sweeps,evnum);}));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
-    time_evolution(T,timesteps,entries,SusceptDiff,init_rand_sites,max_bond,tdvp_args,Sweeps);
+
+    time_evolution(T,timesteps,entries,SusceptDiff,init_rand_sites,max_bond,tdvp_args,Sweeps,0);
 
 
     for (auto& i : ThreadVector){
@@ -855,6 +1055,7 @@ void Kitaev_Model::TPQ_MPS(std::vector<int> timesteps, std::vector<double> inter
     E = Mean(Energies);
     Cv = Mean(Capacity);
     Cv_alt = Mean(Alternative_Capacity);
+    Cv_O2 = Mean(Alternative_Capacity_O2);
     S = Mean(Entropy);
     W = Mean(Flux);
 
@@ -894,6 +1095,223 @@ void Kitaev_Model::TPQ_MPS(std::vector<int> timesteps, std::vector<double> inter
         std::cout << "Maximum MPS bond dimension: " << max_bond << "\n\n" << std::flush;
     }
 }
+
+
+
+Kitaev_Model::Kitaev_Model(std::string backup_name){
+
+    this->backup_name = backup_name;
+
+    std::ifstream file1(backup_name + "/LX.txt");
+    file1 >> this->LX;
+    file1.close();
+
+    std::ifstream file2(backup_name + "/LY.txt");
+    file2 >> this->LY;
+    file2.close();
+
+    int DoubleSpin;
+    std::ifstream file3(backup_name + "/DS.txt");
+    file3 >> DoubleSpin;
+    file3.close();
+
+    std::ifstream file4(backup_name + "/aux.txt");
+    file4 >> this->aux;
+    file4.close();
+
+    std::ifstream file5(backup_name + "/sec_aux.txt");
+    file5 >> this->sec_aux;
+    file5.close();
+
+    std::ifstream file6(backup_name + "/LT.txt");
+    file6 >> this->Lattice_Type;
+    file6.close();
+
+    int Evols;
+    std::ifstream file7(backup_name + "/Evols.txt");
+    file7 >> Evols;
+    file7.close();
+
+
+    std::ifstream filestr(backup_name + "/foldername.txt");
+    if (filestr){
+        filestr >> this->Foldername;
+        filestr.close();
+    }
+
+    this -> sites = itensor::readFromFile<itensor::CustomSpinNitsch>(backup_name + "/sites");
+    this -> ampo = AutoMPO(sites);
+    this -> dims = DoubleSpin + 1;
+    this -> CalcTDVP = true;
+
+    std::vector<double> Hinf;
+    Hinf.reserve(9);
+    load_vector(backup_name + "/H.txt", Hinf);
+
+    H_Details.set("Kx",Hinf[0]);
+    H_Details.set("Ky",Hinf[1]);
+    H_Details.set("Kz",Hinf[2]);
+    H_Details.set("J",Hinf[3]);
+    H_Details.set("hx",Hinf[4]);
+    H_Details.set("hy",Hinf[5]);
+    H_Details.set("hz",Hinf[6]);
+    H_Details.set("Gamma",Hinf[7]);
+    H_Details.set("GammaQ",Hinf[8]);
+    file7.close();
+
+
+    std::vector<int> full_points;
+    switch(Lattice_Type){
+        case 1:
+        case 3:
+        case 4:
+        case 5:
+            full_points.reserve(((LY+1)/2)*LX);
+            for (int m = 0; m != LX; m++){
+                for (int n = 1; n <= LY; n+=2){
+                    full_points.push_back(n+LY*m);
+                }   
+            }
+            break;
+        case 2:
+        case 6:
+            full_points.reserve(LX*LY);
+            for (int i = 1; i != LX*LY+1; i++){
+                full_points.push_back(i);
+            }
+            break;
+    }
+
+
+
+    add_kitaev_interaction(full_points,aux,sec_aux);
+    add_magnetic_interaction(aux,sec_aux);
+    add_heisenberg_interaction(full_points,aux,sec_aux);
+    add_gamma_interaction(full_points,aux,sec_aux);
+    add_gammaq_interaction(full_points,aux,sec_aux);
+
+    if (DoubleSpin == 1){
+        this -> H_flux = honeycomb_flux_operator_half(aux,sec_aux);
+    } 
+    else{        
+        this -> H_flux = honeycomb_flux_operator(aux,sec_aux);
+    }
+        
+    this -> H0 = toMPO(this -> ampo);
+    auto Ms = magnetization_operators(aux,sec_aux);
+    M = Ms[0];
+    M2 = Ms[1];
+
+    std::cout << "Spin " << DoubleSpin << "/2 System" << "\n";
+    std::cout << "Lattice Type Reloaded: " << Lattice_Type << "\n";
+    std::cout << "LX = " << LX << ", LY = " << LY << "\n";
+    std::cout << "Auxiliary Sites: " << aux << "\n";
+    std::cout << "Secondary Auxiliary Sites: " << sec_aux << "\n\n";
+    std::cout << "Hamiltonian Parameters \n";
+    this->H_Details.print();
+    std::cout << "\n\n";
+
+    int max_bond = 0;
+    auto t0 = std::chrono::system_clock::now();
+
+    std::vector<itensor::Cplx> T;
+    std::vector<int> timesteps;
+    load_vector(backup_name + "/timesteps.txt", timesteps);
+
+    double Tsmall;
+    std::ifstream file8(backup_name + "/T.txt");
+    while (file8 >> Tsmall){
+        T.push_back(Tsmall * itensor::Cplx_1);
+    }
+    file8.close();
+
+    int entries = 0;
+    for (auto& i : timesteps){
+        entries += i;
+    }
+
+
+    int SusceptDiff = 0;
+
+    int init_rand_sites;
+    std::ifstream file9(backup_name + "/minsites.txt");
+    file9 >> init_rand_sites;
+    file9.close();
+
+    int max_sites;
+    std::ifstream file10(backup_name + "/maxsites.txt");
+    file10 >> max_sites;
+    file10.close();
+
+    int TDVP;
+    std::ifstream file11(backup_name + "/TDVP.txt");
+    file11 >> TDVP;
+    file11.close();
+
+    auto Sweeps = itensor::Sweeps(1);
+    auto tdvp_args = itensor::Args({"Silent",true,"ErrGoal",1E-7,"NumCenter",TDVP});
+    Sweeps.maxdim() = max_sites;
+    Sweeps.cutoff() = 1e-10;
+    Sweeps.mindim() = init_rand_sites;
+    Sweeps.niter() = 30;
+
+    /*
+    for (int i = 0; i != timesteps.size(); i++){
+        for (int j = 0; j != timesteps[i]; j++){
+
+        }
+    }
+*/
+
+
+
+    std::vector<std::future<void>> ThreadVector;
+    ThreadVector.reserve(Evols-1);
+    for (int i = 0; i != Evols-1; i++){
+        int evnum = i+1;
+        ThreadVector.push_back(std::async(std::launch::async,[&](){time_evolution_cont(T,timesteps,entries,SusceptDiff,init_rand_sites,std::ref(max_bond),tdvp_args,Sweeps,evnum);}));
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    time_evolution_cont(T,timesteps,entries,SusceptDiff,init_rand_sites,max_bond,tdvp_args,Sweeps,0);
+
+
+    E = Mean(Energies);
+    Cv = Mean(Capacity);
+    Cv_alt = Mean(Alternative_Capacity);
+    Cv_O2 = Mean(Alternative_Capacity_O2);
+    S = Mean(Entropy);
+    W = Mean(Flux);
+
+    Mx = Mean(Magnetization[0]);
+    My = Mean(Magnetization[1]);
+    Mz = Mean(Magnetization[2]);
+
+    Mx2 = Mean(Magnetization2[0]);
+    My2 = Mean(Magnetization2[1]);
+    Mz2 = Mean(Magnetization2[2]);
+    
+    
+    auto t3 = std::chrono::system_clock::now();
+    auto time_total = std::chrono::duration<double>(t3-t0);
+
+    auto hours = std::chrono::duration_cast<std::chrono::hours>(time_total);
+    auto minutes = std::chrono::duration_cast<std::chrono::minutes>(time_total-hours);
+    auto seconds = std::chrono::duration_cast<std::chrono::seconds>(time_total-hours-minutes);
+    std::cout << "\n\n";
+    std::cout << "Finished Imaginary Time Evolution, Time Needed: " << hours.count() << " Hours, " << minutes.count() << " Minutes, " << seconds.count() << " Seconds\n" << std::flush;
+
+    if (max_bond == max_sites){
+        std::cout << "Warning: MPS bond dimension has reached the bond dimension maximum. For more accurate results increase max_sites.\n\n" << std::flush;
+    }
+    else {
+        std::cout << "Maximum MPS bond dimension: " << max_bond << "\n\n" << std::flush;
+    }
+
+    
+
+}
+
+
 
 
 
